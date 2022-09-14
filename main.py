@@ -29,6 +29,7 @@ def plot_loss(train_losses, val_losses, val_accuracy):
 
     sec_ax = ax.twinx()
     sec_ax.plot(val_accuracy, c="tab:green", label="Validation accuracy")
+    sec_ax.set_ylabel("Accuracy")
 
     plt.legend()
     plt.savefig("output/losses.png", dpi=300, bbox_inches="tight")
@@ -44,14 +45,13 @@ def get_n_params():
 def calc_accuracy(y: torch.Tensor, output: torch.Tensor):
     max_output_indices = output.max(dim=1)[1]
     accuracy = (y == max_output_indices).sum() / y.shape[0]
-    return round(accuracy.item(), 4)
+    return format(accuracy.item(), "0.4f")
 
 
 def train(model, train_loader, val_loader):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
-    model.train()
 
     train_losses = []
     val_losses = []
@@ -61,8 +61,8 @@ def train(model, train_loader, val_loader):
 
         for idx, (x, y) in enumerate(train_loader):
 
+            model.train()
             x, y = x.cuda(), y.cuda()
-            learning_rate = round(optimizer.param_groups[0]['lr'], 4)
 
             optimizer.zero_grad()
             output = model(x)
@@ -72,6 +72,7 @@ def train(model, train_loader, val_loader):
 
             # Validation
             if idx % int(len(train_loader)) / 3 == 0:
+                model.eval()
                 x_val, y_val = next(iter(val_loader))
                 x_val, y_val = x_val.cuda(), y_val.cuda()
                 val_output = model(x_val)
@@ -81,11 +82,12 @@ def train(model, train_loader, val_loader):
                 val_losses.append(val_loss.item())
                 val_accuracy.append(calc_accuracy(y, output))
 
-                print(epoch, "\t",
-                      round(loss.item(), 4),
-                      round(val_loss.item(), 4), "\t",
-                      calc_accuracy(y, output),
-                      "\t", learning_rate
+                print(
+                    epoch, "\t",
+                    format(round(loss.item(), 4), "0.4f"),
+                    format(round(val_loss.item(), 4), "0.4f"), "\t",
+                    calc_accuracy(y, output), "\t",
+                    round(optimizer.param_groups[0]['lr'], 4)
                 )
 
 
@@ -95,6 +97,7 @@ def train(model, train_loader, val_loader):
 def main():
     torch.manual_seed(0)
     train_loader, val_loader = load_data(batch_size=BATCH_SIZE)
+
     get_n_params()
 
     model = Model().cuda()
