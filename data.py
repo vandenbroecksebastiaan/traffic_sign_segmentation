@@ -36,13 +36,22 @@ def load_data(batch_size: int):
         # ])
     ]
 
-    # Load the dataset and split it in a train and validation part
-    dataset = torchvision.datasets.GTSRB(root="data/", download=True,
-                                         transform=transforms[0])
-    train_set_reference, val_set = torch.utils.data.random_split(
-        dataset, [int(len(dataset)*0.9), int(len(dataset)*0.1)]
+    # Load the train and test datasets
+    dataset_train = torchvision.datasets.GTSRB(root="data/", download=True,
+                                               split="train",
+                                               transform=transforms[0])
+    print("dataset_train", len(dataset_train))
+    test_set = torchvision.datasets.GTSRB(root="data/", download=True,
+                                          split="test",
+                                          transform=transforms[0])
+
+    # Split the train dataset into train and validation part
+    train_set, val_set = torch.utils.data.random_split(
+        dataset_train, [int(len(dataset_train)*0.9), int(len(dataset_train)*0.1)]
     )
 
+
+    """
     # Apply transformations to the train set
     transformed_train_sets = []
     for transform in transforms:
@@ -51,11 +60,15 @@ def load_data(batch_size: int):
         transformed_train_sets.append(train_set)
 
     train_set = torch.utils.data.ConcatDataset(transformed_train_sets)
+    """
 
     # Create dataloaders from datasets
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
                                              shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_set,
+                                              batch_size=1024,
+                                              shuffle=True)
 
-    return train_loader, val_loader
+    return train_loader, val_loader, test_loader
