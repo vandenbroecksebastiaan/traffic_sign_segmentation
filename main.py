@@ -1,20 +1,16 @@
-from sklearn.metrics import accuracy_score
 import torch
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 import numpy as np
 
 from model import Model
 from data import load_data
 
-# TODO: create a notebook with predictions
-
 BATCH_SIZE = 256
-EPOCHS = 1
+EPOCHS = 10
 LR = 0.001
-TRAIN = False
+TRAIN = True
 
 def plot_image(dataloader, image_idx):
     image = list(enumerate(dataloader))[image_idx][1][0]
@@ -31,6 +27,7 @@ def plot_loss(train_losses, val_losses, val_accuracy):
     ax.plot(train_losses, c="tab:blue")
     ax.plot(val_losses, c="tab:orange")
     ax.set_ylabel("Cross entropy loss")
+    ax.set_xticks([])
 
     sec_ax = ax.twinx()
     sec_ax.plot(val_accuracy, c="tab:green")
@@ -49,8 +46,7 @@ def plot_loss(train_losses, val_losses, val_accuracy):
     plt.savefig("output/losses.png", dpi=300, bbox_inches="tight")
 
 
-def get_n_params():
-    model = Model()
+def get_n_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print("Number of params:", params)
@@ -59,7 +55,7 @@ def get_n_params():
 def calc_accuracy(output: torch.Tensor, y: torch.Tensor):
     max_output_indices = output.max(dim=1)[1]
     accuracy = (y == max_output_indices).sum() / y.shape[0]
-    return format(accuracy.item(), "0.4f")
+    return accuracy.item()
 
 
 def train(model, train_loader, val_loader, lr):
@@ -107,7 +103,7 @@ def train(model, train_loader, val_loader, lr):
                     epoch, "     |",
                     format(round(train_loss, 4), "0.4f"), " |",
                     format(round(val_loss, 4), "0.4f"), "         |",
-                    val_accuracy
+                    format(val_accuracy, "0.4f")
                 )
 
     print("\n")
@@ -118,33 +114,39 @@ def train(model, train_loader, val_loader, lr):
 def test(model, test_loader):
     model.eval()
 
-    # Obtain test loss and accuracy
-    x_test, y_test  = next(iter(test_loader))
-    x_test, y_test = x_test.cuda(), y_test.cuda()
-    output = model(x_test)
+    test_losses = []
+    predictions = []
+    targets = []
 
-    loss = torch.nn.CrossEntropyLoss()(output, y_test).item()
-    loss = format(round(loss, 4), "0.4f")
-    accuracy = calc_accuracy(output, y_test)
+    # Enumerate over the test dataloader to track predictions
+    for _, (x_test, y_test) in enumerate(test_loader):
+        # Save test loss
+        x_test, y_test  = next(iter(test_loader))
+        x_test, y_test = x_test.cuda(), y_test.cuda()
+        output = model(x_test)
 
-    print("Test cross entropy loss:", loss, "\t", "Test accuracy", accuracy)
+        test_loss = torch.nn.CrossEntropyLoss()(output, y_test).item()
+        test_losses.append(test_loss)
 
-    # Obtain test confusion matrix
-    output_argmax = torch.argmax(output, dim=1).tolist()
-    y_test_list = y_test.tolist()
-    confmat = confusion_matrix(y_test_list, output_argmax)
+        # Save predictions and targets
+        output_argmax = torch.argmax(output, dim=1)
+        predictions.extend(output_argmax.tolist())
+        targets.extend(y_test.tolist())
 
-    plt.figure(figsize=(10, 10))
-    plt.imshow(confmat, cmap="Blues")
-    plt.xticks(range(0, 43), rotation=90)
-    plt.yticks(range(0, 43))
+    # Calculate mean test loss and accuracy
+    mean_test_loss = sum(test_losses) / len(test_losses)
+    test_accuracy = sum([1 for i, j in zip(predictions, targets) if i == j]) \
+                        / len(predictions)
 
-    for idx, i in enumerate(confmat):
-        print(idx, i)
+    print("Mean test loss", format(round(mean_test_loss, 4), "0.4f"),
+          "\nTest accuracy", test_accuracy)
 
-    plt.savefig("output/confmat.png", dpi=300, bbox_inches="tight")
-    
-    exit(0)
+    # Save classification report
+    report = classification_report(targets, predictions)
+    with open("output/classification_report.txt", "w") as file:
+        file.write(report)
+        file.close()
+
 
 
 def main():
@@ -152,13 +154,16 @@ def main():
     train_loader, val_loader, test_loader = load_data(batch_size=BATCH_SIZE)
 
     model = Model().cuda()
+    get_n_params(model)
 
     if TRAIN:
+        # Train the model
         train_losses, val_losses, val_accuracy = \
             train(model, train_loader, val_loader, LR)
-
         # Save model weights
         torch.save(model.state_dict(), "output/model.pt")
+        # Track training information
+        plot_loss(train_losses, val_losses, val_accuracy)
 
     if not TRAIN:
         # Load model weights
@@ -166,9 +171,6 @@ def main():
 
     # Obtain statistics
     test(model, test_loader)
-
-    if TRAIN:
-        plot_loss(train_losses, val_losses, val_accuracy)
 
 
 if __name__ == "__main__":
