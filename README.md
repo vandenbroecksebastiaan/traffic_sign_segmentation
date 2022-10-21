@@ -1,0 +1,1 @@
+This is my solution for the German Traffic Sign Recognition Benchmark. More information can be found in the illustration notebook.
